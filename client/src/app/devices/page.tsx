@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import SearchHandler from "./search";
 
 export default function DevicesPage() {
@@ -9,7 +9,13 @@ export default function DevicesPage() {
 
   return (
     <>
-      <SearchHandler setLoading={setLoading} setResponseMessage={setResponseMessage} />
+      <Suspense fallback={<div className="p-4 text-gray-500">Loading...</div>}>
+        <SearchHandler
+          setLoading={setLoading}
+          setResponseMessage={setResponseMessage}
+        />
+      </Suspense>
+
       {loading ? (
         <div className="flex items-center justify-center h-screen bg-gray-100">
           <p className="text-lg font-medium text-gray-700 animate-pulse">
