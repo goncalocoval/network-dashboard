@@ -94,3 +94,4 @@ export default function DevicesPage() {
         </div>
     );
 }
+export const dynamic = 'force-dynamic';
