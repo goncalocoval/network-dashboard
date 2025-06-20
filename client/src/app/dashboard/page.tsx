@@ -15,30 +15,162 @@ export default function Dashboard() {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [resetText, setResetText] = useState('');
   const [sshQRModalOpen, setSshQRMModalOpen] = useState(false);
+  const [isBlockedIPsModalOpen, setIsBlockedIPsModalOpen] = useState(false);
+  const [blockedData, setBlockedData] = useState('');
+  const [oldPassword, setOldPassword] = useState('');
+  const [sshMessage, setSshMessage] = useState('');
+  const [vpnMessage, setVpnMessage] = useState('');
+  
+  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
+
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+
+  const clearInputs = () => {
+    setNewUserEmail('');
+    setNewUserPassword('');
+    setNewPassword('');
+    setOldPassword('');
+  };
+
+  const handleAddUser = async () => {
+
+    const message = document.getElementById('addUserMessage');
+    if (message) {
+      message.classList.add('hidden');
+      message.classList.remove('text-red-800', 'text-green-800');
+    }
+
+    if (!newUserEmail || !newUserPassword || newUserPassword.length < 10) {
+
+      if (message) {
+        message.classList.remove('hidden');
+        message.classList.add('text-red-800');
+        message.textContent = 'Please fill in all fields with valid data.';
+        setTimeout(() => {
+          message.classList.add('hidden');
+        }, 2000);
+      }
+      return;
+    }
+
+    
+    try {
+      
+      const response = await axios.post('/api/auth/register', {
+        email: newUserEmail,
+        password: newUserPassword
+      });
+
+      if(message){
+        message.classList.remove('hidden');
+        message.classList.add('text-green-800');
+        message.textContent = 'User created successfully!';
+        setTimeout(() => {
+          message.classList.add('hidden');
+        }, 2000);
+      }
+      
+      setNewUserEmail('');
+      setNewUserPassword('');
+
+    } catch (error: any) {
+      if (message) {
+        message.classList.remove('hidden');
+        message.classList.add('text-red-800');
+        message.textContent = 'Error creating user (possibly already exists)!';
+        setTimeout(() => {
+          message.classList.add('hidden');
+        }, 2000);
+      }
+    }
+  };
+
+  const handleChangePassword = async () => {
+
+    const message = document.getElementById('changePasswordMessage');
+    if (message) {
+      message.classList.add('hidden');
+      message.classList.remove('text-red-800', 'text-green-800');
+    }
+
+    if (!newPassword || newPassword.length < 10) {
+      if (message) {
+        message.classList.remove('hidden');
+        message.classList.add('text-red-800');
+        message.textContent = 'Please fill in all fields with valid data.';
+        setTimeout(() => {
+          message.classList.add('hidden');
+        }, 2000);
+      }
+      return;
+    }
+
+    try {
+      const email = localStorage.getItem('email');
+      const response = await axios.patch('/api/auth/update-password', {
+        email: email,
+        oldPassword: oldPassword,
+        newPassword: newPassword
+      });
+
+      if (message) {
+        message.classList.remove('hidden');
+        message.classList.add('text-green-800');
+        message.textContent = 'Password changed successfully!';
+        setTimeout(() => {
+          message.classList.add('hidden');
+        }, 2000);
+      }
+
+      setOldPassword('');
+      setNewPassword('');
+    } catch (error: any) {
+      if (message) {
+        message.classList.remove('hidden');
+        message.classList.add('text-red-800');
+        message.textContent = 'Error changing password!';
+        
+        setTimeout(() => {
+          message.classList.add('hidden');
+        }, 2000);
+      }
+    }
+  };
+
 
   const handleGenerateVpnClient = async () => {
+    setIsQRModalOpen(true);
+    setQrCode(null);
+    setFilename(null);
+    setVpnMessage('Loading...');
     try {
       const response = await axios.post('/api/vpn/generate');
       const base64Image = response.data.qr;
       const filename = response.data.filename;
 
       if (base64Image && filename) {
+        setVpnMessage('Scan this QR code with the Wireguard app:');
         setQrCode(base64Image);
         setFilename(filename);
-        setIsQRModalOpen(true);
       } else {
-        alert('Erro: QR code não recebido.');
+        setVpnMessage('Error generating QR code. Please try again.');
       }
     } catch (error) {
-      console.error('Erro ao gerar cliente VPN:', error);
-      alert('Erro ao gerar cliente VPN.');
+      setVpnMessage('Error generating QR code. Please try again.');
     }
   };
 
   const handleDownloadVpnConfig = async () => {
+    
     try {
       const response = await axios.get('/api/vpn/download/' + filename, {
         responseType: 'blob',
+        headers: {
+          'ngrok-skip-browser-warning': 'true',
+        },  
       });
 
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -58,26 +190,41 @@ export default function Dashboard() {
 
   const resetVpn = async () => {
     setResetText('VPN reseting...');
+    const resetTextElement = document.getElementById('resetVpnText');
+    if (resetTextElement) {
+      resetTextElement.classList.remove('text-green-800', 'text-red-800');
+    }
     try {
       const response = await axios.post('/api/vpn/reset');
       if (response.status === 200) {
+        const resetTextElement = document.getElementById('resetVpnText');
+        if (resetTextElement) {
+          resetTextElement.classList.add('text-green-800');
+        }
         setResetText('VPN reseted successfully.');
       } else {
-        alert('Erro ao resetar VPN.');
+        if(resetTextElement) {
+          resetTextElement.classList.add('text-red-800');
+        }
+        setResetText('Failed to reset VPN.');
       }
     } catch (error) {
-      console.error('Erro ao resetar VPN:', error);
-      alert('Erro ao resetar VPN.');
+      setResetText('Error resetting VPN.');
     }
   };
 
   const fetchLog = async (type: 'network' | 'vpn' | 'ssh') => {
     setSelectedLog(type);
     setIsLogModalOpen(true);
+    setLoading(true);
 
     try {
-      const response = await axios.get(`/api/logs/${type}`);
-      setLogData(response.data['data'] || 'Log vazio.');
+      const response = await axios.get(`/api/logs/${type}`, {
+        headers: {
+          'ngrok-skip-browser-warning': 'true',
+        },
+      });
+      setLogData(response.data['data'] || 'No log data available.');
       
     } catch (error) {
       setLogData('Erro ao carregar log.');
@@ -86,17 +233,39 @@ export default function Dashboard() {
   };
 
   const handleShareAuthenticator = async () => {
+    setQrCode(null);
+    setSshMessage('Loading...');
+    setSshQRMModalOpen(true);
+    
     try {
       const response = await axios.post('/api/ssh/share');
       if (response.data.qrCode) {
+        setSshMessage('Scan this QR code with the Google Authenticator app:');
         setQrCode(response.data.qrCode);
-        setSshQRMModalOpen(true);
       } else {
-        alert('Erro ao obter QR code.');
+        setSshMessage('Error generating QR code. Please try again.');
       }
     } catch (error) {
-      console.error('Erro ao obter QR code:', error);
-      alert('Erro ao obter QR code.');
+      setSshMessage('Error generating QR code. Please try again.');
+    }
+
+  };
+
+  const handleViewBlockedIPs = async () => {
+    try {
+      const response = await axios.get('/api/ssh/view', {
+          headers: {
+            'ngrok-skip-browser-warning': 'true',
+          },
+        }
+      );
+
+      const formattedBlockedIPs = response.data.blockedIps.map((ip: string, index: number) => `${index + 1}. ${ip}`).join('\n');
+      setBlockedData(formattedBlockedIPs || 'No blocked IPs found.');
+      setIsBlockedIPsModalOpen(true);
+    
+    } catch (error) {
+      console.error('Erro ao obter IPs bloqueados:', error);
     }
   };
 
@@ -120,7 +289,9 @@ export default function Dashboard() {
                 className="flex items-center px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
                 onClick={() => setDropdownOpen(!dropdownOpen)}
               >
-                covalgoncalo2003@gmail.com
+                <span className="text-sm font-semibold">
+                  {localStorage.getItem('email') || 'User'}
+                </span>
                 <svg
                   className="w-4 h-4 ml-2"
                   xmlns="http://www.w3.org/2000/svg"
@@ -141,12 +312,20 @@ export default function Dashboard() {
                   dropdownOpen ? 'block' : 'hidden'
                 }`}
               >
-                <button className="block rounded-t w-full px-4 py-2 text-left hover:bg-gray-100">
+
+                <button
+                  className="block rounded-t w-full px-4 py-2 text-left hover:bg-gray-100"
+                  onClick={() => setIsChangePasswordModalOpen(true)}
+                >
                   Change Password
                 </button>
-                <button className="block w-full px-4 py-2 text-left hover:bg-gray-100">
+                <button
+                  className="block w-full px-4 py-2 text-left hover:bg-gray-100"
+                  onClick={() => setIsAddUserModalOpen(true)}
+                >
                   Add User
                 </button>
+
                 <button className="block rounded-b w-full bg-red-600 px-4 py-2 text-left hover:bg-red-700 text-white"
                   onClick={() => {
                     localStorage.removeItem('token');
@@ -198,7 +377,7 @@ export default function Dashboard() {
                 <button 
                   onClick={() => {
                     setIsResetModalOpen(true);
-                    setResetText('Are you sure you want to reset the VPN?');
+                    setResetText('Are you sure you want to reset the VPN? This will remove all current VPN configurations and clients.');
                   }}
                   className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
                   Reset VPN
@@ -218,7 +397,9 @@ export default function Dashboard() {
                 >
                   Share Authenticator
                 </button>
-                <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                  onClick={handleViewBlockedIPs}
+                >
                   View Blocked IPs
                 </button>
               </div>
@@ -275,19 +456,19 @@ export default function Dashboard() {
                 </div>
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto ps-5 pe-5 bg-gray-100">
-                {loading ? (
-                  <p className="text-center text-gray-500">Loading...</p>
-                ) : (
-                  <pre className="p-1 rounded overflow-x-auto text-sm text-gray-800">
-                  {logData}
-                  </pre>
-                )}
+                  {loading ? (
+                    <p className="text-center text-gray-500 p-4">Loading...</p>
+                  ) : (
+                    <pre className="p-1 rounded overflow-x-auto text-sm text-gray-800">
+                    {logData}
+                    </pre>
+                  )}
                 </div>
                 {/* Footer */}
                 <div className="p-6 border-t bg-white sticky bottom-0 z-10 flex justify-end">
                 <button
                   onClick={() => setIsLogModalOpen(false)}
-                  className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                  className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
                 >
                   Close
                 </button>
@@ -304,6 +485,9 @@ export default function Dashboard() {
                   <h2 className="text-2xl font-bold text-gray-800">QR Code</h2>
                 </div>
                 <div className="flex-1 overflow-y-auto ps-5 pe-5 bg-gray-100">
+                  <p className="text-center text-gray-500 p-4">
+                    {vpnMessage}
+                  </p>
                   {qrCode && (
                     <img
                       src={`data:image/png;base64,${qrCode}`}
@@ -314,19 +498,21 @@ export default function Dashboard() {
                 </div>
                 <div className="p-6 border-t bg-white sticky bottom-0 z-10 flex justify-end">
 
+                  <button
+                    onClick={() => setIsQRModalOpen(false)}
+                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 me-2"
+                  >
+                    Close
+                  </button>
+
                   <button 
                     onClick={handleDownloadVpnConfig}
-                    className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 me-2"
+                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
                   >
                     Download
                   </button>
 
-                  <button
-                    onClick={() => setIsQRModalOpen(false)}
-                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-                  >
-                    Close
-                  </button>
+                  
                 </div>
               </div>
             </div>
@@ -340,20 +526,20 @@ export default function Dashboard() {
                   <h2 className="text-2xl font-bold text-gray-800">Reset VPN</h2>
                 </div>
                 <div className="flex-1 overflow-y-auto ps-5 pe-5 bg-gray-100 text-center p-3">
-                  <p>{resetText}</p>
+                  <p id="resetVpnText" className="text-gray-500 p-4">{resetText}</p>
                 </div>
                 <div className="p-6 border-t bg-white sticky bottom-0 z-10 flex justify-end">
                   <button
-                    onClick={resetVpn}
-                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 me-2"
-                  >
-                    Reset
-                  </button>
-                  <button
                     onClick={() => setIsResetModalOpen(false)}
-                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 me-2"
                   >
                     Close
+                  </button>
+                  <button
+                    onClick={resetVpn}
+                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                  >
+                    Reset
                   </button>
                 </div>
               </div>
@@ -368,10 +554,13 @@ export default function Dashboard() {
                   <h2 className="text-2xl font-bold text-gray-800">QR Code</h2>
                 </div>
                 <div className="flex-1 overflow-y-auto ps-5 pe-5 bg-gray-100">
+                  <p className="text-center text-gray-500 p-4">
+                    {sshMessage}
+                  </p>
                   {qrCode && (
                     <img
                       src={qrCode}
-                      alt="QR Code"
+                      alt="Error getting QR Code. Please try again."
                       className="mx-auto my-4"
                     />
                   )}
@@ -379,9 +568,124 @@ export default function Dashboard() {
                 <div className="p-6 border-t bg-white sticky bottom-0 z-10 flex justify-end">
                   <button
                     onClick={() => setSshQRMModalOpen(false)}
+                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          { /* View Blocked IPs Modal */}
+          {isBlockedIPsModalOpen && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-3/4 lg:w-2/3 max-h-[80vh] overflow-hidden flex flex-col">
+                <div className="p-6 border-b bg-white sticky top-0 z-10">
+                  <h2 className="text-2xl font-bold text-gray-800">Blocked IPs</h2>
+                </div>
+                <div className="flex-1 overflow-y-auto ps-5 pe-5 bg-gray-100">
+                  {blockedData ? (
+                    <pre className="p-1 rounded overflow-x-auto text-sm text-gray-800">
+                      {blockedData}
+                    </pre>
+                  ) : (
+                    <p className="text-center text-gray-500">No blocked IPs found.</p>
+                  )}
+                </div>
+                <div className="p-6 border-t bg-white sticky bottom-0 z-10 flex justify-end">
+                  <button
+                    onClick={() => setIsBlockedIPsModalOpen(false)}
                     className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
                   >
                     Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isAddUserModalOpen && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
+                <h2 className="text-xl font-bold mb-4">Add New User</h2>
+                <p className="hidden text-center mb-4" id="addUserMessage"></p>
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded mb-3"
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded mb-4"
+                />
+                <p className="text-sm text-gray-500 mb-4">
+                  Password must be at least 10 characters long.
+                </p>
+
+                <div className="flex justify-end space-x-2">
+                  <button
+                    onClick={() => {
+                      setIsAddUserModalOpen(false);
+                      clearInputs();
+                    }}
+                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={handleAddUser}
+                    className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isChangePasswordModalOpen && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
+                <h2 className="text-xl font-bold mb-4">Change Password</h2>
+                <p className="hidden text-center mb-4" id="changePasswordMessage"></p>
+                <input
+                  type="password"
+                  placeholder="Old Password"
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded mb-4"
+                />
+                <input
+                  type="password"
+                  placeholder="New Password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded mb-4"
+                />
+                <p className="text-sm text-gray-500 mb-4">
+                  Password must be at least 10 characters long.
+                </p>
+                <div className="flex justify-end space-x-2">
+                  <button
+                    onClick={() => {
+                      setIsChangePasswordModalOpen(false);
+                      clearInputs();
+                    }}
+                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={handleChangePassword}
+                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                  >
+                    Change
                   </button>
                 </div>
               </div>
@@ -394,6 +698,7 @@ export default function Dashboard() {
             <hr className="mb-3" />
             <p className="text-center text-gray-700">Copyright © 2025 Diogo Curralo, Gonçalo Coval and Tiago Dias </p>
           </div>
+
         </div>
       </div>
     </div>
