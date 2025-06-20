@@ -20,6 +20,13 @@ export default function Dashboard() {
   const [oldPassword, setOldPassword] = useState('');
   const [sshMessage, setSshMessage] = useState('');
   const [vpnMessage, setVpnMessage] = useState('');
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setUserEmail(localStorage.getItem('email'));
+    }
+  }, []);
   
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
@@ -290,7 +297,7 @@ export default function Dashboard() {
                 onClick={() => setDropdownOpen(!dropdownOpen)}
               >
                 <span className="text-sm font-semibold">
-                  {localStorage.getItem('email') || 'User'}
+                  {userEmail || 'User'}
                 </span>
                 <svg
                   className="w-4 h-4 ml-2"
