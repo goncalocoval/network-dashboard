@@ -21,11 +21,36 @@ export default function Dashboard() {
   const [sshMessage, setSshMessage] = useState('');
   const [vpnMessage, setVpnMessage] = useState('');
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  type Device = {
+    name?: string;
+    ip: string;
+    mac?: string;
+  };
+  const [connectedDevices, setConnectedDevices] = useState<Device[]>([]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setUserEmail(localStorage.getItem('email'));
     }
+
+    axios.get('/api/network/devices', 
+      {
+        headers: {
+          'ngrok-skip-browser-warning': 'true',
+        },
+      }
+    )
+      .then((response) => {
+        setConnectedDevices(response.data.devices || []);
+      })
+      .catch((error) => {
+        const tableMessage = document.getElementById('tableMessage');
+        if (tableMessage) {
+          tableMessage.textContent = 'Error loading network devices. Please try again later.';
+        }
+    });
+
+
   }, []);
   
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
@@ -415,38 +440,33 @@ export default function Dashboard() {
 
           <div className="section p-8 mb-4">
             <h2 className="text-2xl font-semibold mb-4 text-gray-700">
-              Network Management
+              Online Devices on Network
             </h2>
             <hr className="mb-4" />
             <table className="w-full bg-white shadow-md rounded">
               <thead className="bg-gray-200">
                 <tr>
                   <th className="py-2 px-4 text-left">ID</th>
+                  <th className="py-2 px-4 text-left">Name</th>
                   <th className="py-2 px-4 text-left">IP Address</th>
                   <th className="py-2 px-4 text-left">MAC Address</th>
-                  <th className="py-2 px-4 text-left">Name</th>
-                  <th className="py-2 px-4 text-left">Created At</th>
-                  <th className="py-2 px-4 text-left">Status</th>
-                  <th className="py-2 px-4 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td className="py-2 px-4">1</td>
-                  <td className="py-2 px-4">192.168.1.1</td>
-                  <td className="py-2 px-4">00:1A:2B:3C:4D:5E</td>
-                  <td className="py-2 px-4">Router</td>
-                  <td className="py-2 px-4">12 June, 2025</td>
-                  <td className="py-2 px-4">Allowed</td>
-                  <td className="py-2 px-4">
-                    <button className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 mr-2">
-                      Allow
-                    </button>
-                    <button className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600">
-                      Block
-                    </button>
-                  </td>
-                </tr>
+                {connectedDevices.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} id="tableMessage" className="py-4 px-4 text-center text-gray-500">Loading network devices...</td>
+                  </tr>
+                ) : (
+                  connectedDevices.map((device, index) => (
+                    <tr key={index}>
+                      <td className="py-2 px-4">{index + 1}</td>
+                      <td className="py-2 px-4">{device.name || device.ip}</td>
+                      <td className="py-2 px-4">{device.ip}</td>
+                      <td className="py-2 px-4">{device.mac || ''}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -603,7 +623,7 @@ export default function Dashboard() {
                 <div className="p-6 border-t bg-white sticky bottom-0 z-10 flex justify-end">
                   <button
                     onClick={() => setIsBlockedIPsModalOpen(false)}
-                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
                   >
                     Close
                   </button>
