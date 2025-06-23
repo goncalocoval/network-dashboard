@@ -3,10 +3,10 @@ import { execFile } from 'child_process';
 import os from 'os';
 import path from 'path';
 
-const VPN_DIRECTORY = process.env.VPN_DIRECTORY || "";
+const WIREGUARD_DIRECTORY = process.env.WIREGUARD_DIRECTORY || "";
 
-const scriptGenerate = path.join(VPN_DIRECTORY, 'add_peer.py');
-const scriptReset = path.join(VPN_DIRECTORY, 'reset_peers.py');
+const scriptGenerate = path.join(WIREGUARD_DIRECTORY, 'add_peer.py');
+const scriptReset = path.join(WIREGUARD_DIRECTORY, 'reset_peers.py');
 
 export const generateVPNClient = (req: Request, res: Response) => {
 
@@ -17,11 +17,12 @@ export const generateVPNClient = (req: Request, res: Response) => {
     }
 
     try {
+	console.log('Raw stdout do script:', JSON.stringify(stdout)); 
       const output = JSON.parse(stdout);
+ 
       return res.json({ qr: output.qr, filename: output.filename });
     } catch (err) {
-      console.error('Erro ao interpretar QR code:', stdout);
-      return res.status(500).json({ error: 'Erro ao interpretar QR code.' });
+      return res.status(500).json({ error: err instanceof Error ? err.message : 'Erro ao interpretar QR code.' });
     }
   });
 };
@@ -40,7 +41,8 @@ export const resetVPN = (req: Request, res: Response) => {
 
 export const downloadVPNClient = (req: Request, res: Response) => {
   const filename = req.params.filename;
-  const filePath = path.join(VPN_DIRECTORY, filename);
+  const clientsDir = path.join(WIREGUARD_DIRECTORY, 'clients');
+  const filePath = path.join(clientsDir, filename);
 
   res.download(filePath, (err) => {
     if (err) {
