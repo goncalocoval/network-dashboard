@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import axios from '../axiosInstance';
 import { useRouter } from 'next/navigation';
+import './dashboard.css';
 
 export default function Dashboard() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -27,19 +28,23 @@ export default function Dashboard() {
     mac?: string;
   };
   const [connectedDevices, setConnectedDevices] = useState<Device[]>([]);
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isResettingVpn, setIsResettingVpn] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setUserEmail(localStorage.getItem('email'));
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = '/login';
     }
 
-    axios.get('/api/network/devices', 
-      {
-        headers: {
-          'ngrok-skip-browser-warning': 'true',
-        },
-      }
-    )
+    setUserEmail(localStorage.getItem('email'));
+
+    axios.get('/api/network/devices', {
+      headers: {
+        'ngrok-skip-browser-warning': 'true',
+      },
+    })
       .then((response) => {
         setConnectedDevices(response.data.devices || []);
       })
@@ -48,10 +53,51 @@ export default function Dashboard() {
         if (tableMessage) {
           tableMessage.textContent = 'Error loading network devices. Please try again later.';
         }
-    });
-
-
+      });
   }, []);
+
+  useEffect(() => {
+    const checkServer = async () => {
+      try {
+        
+        const response = await axios.get('/',{
+          headers: {
+            'ngrok-skip-browser-warning': 'true',
+          },  
+        });
+
+      } catch (error) {
+        alert('Connection to server lost. Redirecting to login...');
+        localStorage.removeItem('token');
+        localStorage.removeItem('email');
+        window.location.href = '/login';
+      }
+    };
+
+    checkServer();
+    const interval = setInterval(checkServer, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const dropdown = document.querySelector('.dropdown');
+      if (dropdown && !dropdown.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [dropdownOpen]);
   
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
@@ -68,6 +114,7 @@ export default function Dashboard() {
   };
 
   const handleAddUser = async () => {
+    setIsAddingUser(true);
 
     const message = document.getElementById('addUserMessage');
     if (message) {
@@ -76,7 +123,6 @@ export default function Dashboard() {
     }
 
     if (!newUserEmail || !newUserPassword || newUserPassword.length < 10) {
-
       if (message) {
         message.classList.remove('hidden');
         message.classList.add('text-red-800');
@@ -85,18 +131,17 @@ export default function Dashboard() {
           message.classList.add('hidden');
         }, 2000);
       }
+      setIsAddingUser(false);
       return;
     }
 
-    
     try {
-      
       const response = await axios.post('/api/auth/register', {
         email: newUserEmail,
-        password: newUserPassword
+        password: newUserPassword,
       });
 
-      if(message){
+      if (message) {
         message.classList.remove('hidden');
         message.classList.add('text-green-800');
         message.textContent = 'User created successfully!';
@@ -104,10 +149,9 @@ export default function Dashboard() {
           message.classList.add('hidden');
         }, 2000);
       }
-      
+
       setNewUserEmail('');
       setNewUserPassword('');
-
     } catch (error: any) {
       if (message) {
         message.classList.remove('hidden');
@@ -118,9 +162,11 @@ export default function Dashboard() {
         }, 2000);
       }
     }
+    setIsAddingUser(false);
   };
 
   const handleChangePassword = async () => {
+    setIsChangingPassword(true);
 
     const message = document.getElementById('changePasswordMessage');
     if (message) {
@@ -137,15 +183,16 @@ export default function Dashboard() {
           message.classList.add('hidden');
         }, 2000);
       }
+      setIsChangingPassword(false);
       return;
     }
 
     try {
       const email = localStorage.getItem('email');
-      const response = await axios.patch('/api/auth/update-password', {
+      await axios.patch('/api/auth/update-password', {
         email: email,
         oldPassword: oldPassword,
-        newPassword: newPassword
+        newPassword: newPassword,
       });
 
       if (message) {
@@ -164,14 +211,13 @@ export default function Dashboard() {
         message.classList.remove('hidden');
         message.classList.add('text-red-800');
         message.textContent = 'Error changing password!';
-        
         setTimeout(() => {
           message.classList.add('hidden');
         }, 2000);
       }
     }
+    setIsChangingPassword(false);
   };
-
 
   const handleGenerateVpnClient = async () => {
     setIsQRModalOpen(true);
@@ -221,6 +267,7 @@ export default function Dashboard() {
   };
 
   const resetVpn = async () => {
+    setIsResettingVpn(true);
     setResetText('VPN reseting...');
     const resetTextElement = document.getElementById('resetVpnText');
     if (resetTextElement) {
@@ -229,13 +276,12 @@ export default function Dashboard() {
     try {
       const response = await axios.post('/api/vpn/reset');
       if (response.status === 200) {
-        const resetTextElement = document.getElementById('resetVpnText');
         if (resetTextElement) {
           resetTextElement.classList.add('text-green-800');
         }
         setResetText('VPN reseted successfully.');
       } else {
-        if(resetTextElement) {
+        if (resetTextElement) {
           resetTextElement.classList.add('text-red-800');
         }
         setResetText('Failed to reset VPN.');
@@ -243,6 +289,7 @@ export default function Dashboard() {
     } catch (error) {
       setResetText('Error resetting VPN.');
     }
+    setIsResettingVpn(false);
   };
 
   const fetchLog = async (type: 'network' | 'vpn' | 'ssh') => {
@@ -284,18 +331,19 @@ export default function Dashboard() {
   };
 
   const handleViewBlockedIPs = async () => {
+    setIsBlockedIPsModalOpen(true);
+    setBlockedData('Loading...');
     try {
       const response = await axios.get('/api/ssh/view', {
-          headers: {
-            'ngrok-skip-browser-warning': 'true',
-          },
-        }
-      );
+        headers: { 'ngrok-skip-browser-warning': 'true' },
+      });
 
-      const formattedBlockedIPs = response.data.blockedIps.map((ip: string, index: number) => `${index + 1}. ${ip}`).join('\n');
-      setBlockedData(formattedBlockedIPs || 'No blocked IPs found.');
-      setIsBlockedIPsModalOpen(true);
-    
+      const total = response.data.total || 0;
+      const ips = response.data.blockedIps || [];
+
+      const formatted = `Total blocked IPs: ${total}\n\n${ips.map((ip: string, index: number) => `${index + 1}. ${ip}`).join('\n') || 'No blocked IPs found.'}`;
+      setBlockedData(formatted);
+      
     } catch (error) {
       console.error('Erro ao obter IPs bloqueados:', error);
     }
@@ -312,7 +360,7 @@ export default function Dashboard() {
               alt=""
             />
             <h1 className="text-3xl font-bold mb-2 text-gray-800">
-              Admin Dashboard
+              Dashboard
             </h1>
           </div>
           <div className="left flex items-center ms-auto">
@@ -374,7 +422,7 @@ export default function Dashboard() {
         <div>
           <div className="section p-8 flex flex-wrap gap-4">
             <div className="left flex-1 min-w-full md:min-w-[48%] lg:min-w-[30%]">
-              <h2 className="text-2xl font-semibold mb-4 text-gray-700">Logs</h2>
+              <h2 className="text-2xl font-semibold mb-4 text-gray-700">📝 Logs</h2>
               <hr className="mb-4" />
               <div className="flex flex-wrap gap-4">
                 <button 
@@ -397,13 +445,14 @@ export default function Dashboard() {
 
             <div className="left flex-1 min-w-full md:min-w-[48%] lg:min-w-[30%]">
               <h2 className="text-2xl font-semibold mb-4 text-gray-700">
-                VPN Management
+                🔐 VPN Management
               </h2>
               <hr className="mb-4" />
               <div className="flex flex-wrap gap-4">
                 <button 
                   onClick={handleGenerateVpnClient}
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                >
                   Generate VPN Client
                 </button>
                 <button 
@@ -419,7 +468,7 @@ export default function Dashboard() {
 
             <div className="left flex-1 min-w-full md:min-w-[48%] lg:min-w-[30%]">
               <h2 className="text-2xl font-semibold mb-4 text-gray-700">
-                SSH Management
+                💻 SSH Management
               </h2>
               <hr className="mb-4" />
               <div className="flex flex-wrap gap-4">
@@ -438,9 +487,9 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="section p-8 mb-4">
+          <div className="section p-8 mb-4 mt-4">
             <h2 className="text-2xl font-semibold mb-4 text-gray-700">
-              Online Devices on Network
+              🌐 Online Devices on Network
             </h2>
             <hr className="mb-4" />
             <table className="w-full bg-white shadow-md rounded">
@@ -473,16 +522,16 @@ export default function Dashboard() {
 
             {/* Log Modal */}
             {isLogModalOpen && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-3/4 lg:w-2/3 max-h-[80vh] overflow-hidden flex flex-col">
+              <div className="fixed inset-0 bg-gray-200 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-3/4 lg:w-2/3 max-h-[80vh] overflow-hidden flex flex-col modal-content">
                 {/* Header */}
-                <div className="p-6 border-b bg-white sticky top-0 z-10">
-                <h2 className="text-2xl font-bold text-gray-800">
-                  {selectedLog?.toUpperCase()} Log
-                </h2>
+                <div className="pt-3 pb-5 border-b bg-white sticky top-0 z-10">
+                  <h2 className="text-2xl font-bold text-gray-800">
+                    {selectedLog?.toUpperCase()} Log
+                  </h2>
                 </div>
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto ps-5 pe-5 bg-gray-100">
+                <div className="flex-1 overflow-y-auto">
                   {loading ? (
                     <p className="text-center text-gray-500 p-4">Loading...</p>
                   ) : (
@@ -492,7 +541,7 @@ export default function Dashboard() {
                   )}
                 </div>
                 {/* Footer */}
-                <div className="p-6 border-t bg-white sticky bottom-0 z-10 flex justify-end">
+                <div className="pt-4 border-t bg-white sticky bottom-0 z-10 flex justify-end">
                 <button
                   onClick={() => setIsLogModalOpen(false)}
                   className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
@@ -506,9 +555,9 @@ export default function Dashboard() {
 
           {/* VPN QR Code Modal */}
           {isQRModalOpen && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-3/4 lg:w-2/3 max-h-[80vh] overflow-hidden flex flex-col">
-                <div className="p-6 border-b bg-white sticky top-0 z-10">
+            <div className="fixed inset-0 bg-gray-200 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-3/4 lg:w-2/3 max-h-[80vh] overflow-hidden flex flex-col modal-content">
+                <div className="pt-3 pb-5 border-b bg-white sticky top-0 z-10">
                   <h2 className="text-2xl font-bold text-gray-800">QR Code</h2>
                 </div>
                 <div className="flex-1 overflow-y-auto ps-5 pe-5 bg-gray-100">
@@ -523,7 +572,7 @@ export default function Dashboard() {
                     />
                   )}
                 </div>
-                <div className="p-6 border-t bg-white sticky bottom-0 z-10 flex justify-end">
+                <div className="pt-4 border-t bg-white sticky bottom-0 z-10 flex justify-end">
 
                   <button
                     onClick={() => setIsQRModalOpen(false)}
@@ -535,6 +584,7 @@ export default function Dashboard() {
                   <button 
                     onClick={handleDownloadVpnConfig}
                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                    disabled={!qrCode}
                   >
                     Download
                   </button>
@@ -547,15 +597,15 @@ export default function Dashboard() {
 
           {/* Reset VPN Modal */}
           {isResetModalOpen && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-3/4 lg:w-2/3 max-h-[80vh] overflow-hidden flex flex-col">
-                <div className="p-6 border-b bg-white sticky top-0 z-10">
+            <div className="fixed inset-0 bg-gray-200 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-3/4 lg:w-2/3 max-h-[80vh] overflow-hidden flex flex-col modal-content">
+                <div className="pt-3 pb-5 border-b bg-white sticky top-0 z-10">
                   <h2 className="text-2xl font-bold text-gray-800">Reset VPN</h2>
                 </div>
                 <div className="flex-1 overflow-y-auto ps-5 pe-5 bg-gray-100 text-center p-3">
                   <p id="resetVpnText" className="text-gray-500 p-4">{resetText}</p>
                 </div>
-                <div className="p-6 border-t bg-white sticky bottom-0 z-10 flex justify-end">
+                <div className="pt-4 border-t bg-white sticky bottom-0 z-10 flex justify-end">
                   <button
                     onClick={() => setIsResetModalOpen(false)}
                     className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 me-2"
@@ -565,8 +615,9 @@ export default function Dashboard() {
                   <button
                     onClick={resetVpn}
                     className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                    disabled={isResettingVpn}
                   >
-                    Reset
+                    {isResettingVpn ? 'Loading...' : 'Reset'}
                   </button>
                 </div>
               </div>
@@ -575,9 +626,9 @@ export default function Dashboard() {
 
           { /* Share Authenticator QR Code Modal*/}
           {sshQRModalOpen && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-3/4 lg:w-2/3 max-h-[80vh] overflow-hidden flex flex-col">
-                <div className="p-6 border-b bg-white sticky top-0 z-10">
+            <div className="fixed inset-0 bg-gray-200 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-3/4 lg:w-2/3 max-h-[80vh] overflow-hidden flex flex-col modal-content">
+                <div className="pt-3 pb-5  border-b bg-white sticky top-0 z-10">
                   <h2 className="text-2xl font-bold text-gray-800">QR Code</h2>
                 </div>
                 <div className="flex-1 overflow-y-auto ps-5 pe-5 bg-gray-100">
@@ -592,7 +643,7 @@ export default function Dashboard() {
                     />
                   )}
                 </div>
-                <div className="p-6 border-t bg-white sticky bottom-0 z-10 flex justify-end">
+                <div className="pt-4 border-t bg-white sticky bottom-0 z-10 flex justify-end">
                   <button
                     onClick={() => setSshQRMModalOpen(false)}
                     className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
@@ -606,12 +657,12 @@ export default function Dashboard() {
 
           { /* View Blocked IPs Modal */}
           {isBlockedIPsModalOpen && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-3/4 lg:w-2/3 max-h-[80vh] overflow-hidden flex flex-col">
-                <div className="p-6 border-b bg-white sticky top-0 z-10">
+            <div className="fixed inset-0 bg-gray-200 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-3/4 lg:w-2/3 max-h-[80vh] overflow-hidden flex flex-col modal-content">
+                <div className="pt-3 pb-5 border-b bg-white sticky top-0 z-10">
                   <h2 className="text-2xl font-bold text-gray-800">Blocked IPs</h2>
                 </div>
-                <div className="flex-1 overflow-y-auto ps-5 pe-5 bg-gray-100">
+                <div className="flex-1 overflow-y-auto">
                   {blockedData ? (
                     <pre className="p-1 rounded overflow-x-auto text-sm text-gray-800">
                       {blockedData}
@@ -620,7 +671,7 @@ export default function Dashboard() {
                     <p className="text-center text-gray-500">No blocked IPs found.</p>
                   )}
                 </div>
-                <div className="p-6 border-t bg-white sticky bottom-0 z-10 flex justify-end">
+                <div className="pt-4 border-t bg-white sticky bottom-0 z-10 flex justify-end">
                   <button
                     onClick={() => setIsBlockedIPsModalOpen(false)}
                     className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
@@ -633,8 +684,8 @@ export default function Dashboard() {
           )}
 
           {isAddUserModalOpen && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
+            <div className="fixed inset-0 bg-gray-200 flex items-center justify-center z-50">
+              <div className="modal-content">
                 <h2 className="text-xl font-bold mb-4">Add New User</h2>
                 <p className="hidden text-center mb-4" id="addUserMessage"></p>
                 <input
@@ -668,8 +719,9 @@ export default function Dashboard() {
                   <button
                     onClick={handleAddUser}
                     className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+                    disabled={isAddingUser}
                   >
-                    Add
+                    {isAddingUser ? 'Loading...' : 'Add'}
                   </button>
                 </div>
               </div>
@@ -677,8 +729,8 @@ export default function Dashboard() {
           )}
 
           {isChangePasswordModalOpen && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
+            <div className="fixed inset-0 bg-gray-200 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 modal-content">
                 <h2 className="text-xl font-bold mb-4">Change Password</h2>
                 <p className="hidden text-center mb-4" id="changePasswordMessage"></p>
                 <input
@@ -711,8 +763,9 @@ export default function Dashboard() {
                   <button
                     onClick={handleChangePassword}
                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                    disabled={isChangingPassword}
                   >
-                    Change
+                    {isChangingPassword ? 'Loading...' : 'Change'}
                   </button>
                 </div>
               </div>
